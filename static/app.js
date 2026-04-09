@@ -1,5 +1,6 @@
 function formatSeconds(totalSeconds) {
   totalSeconds = Math.max(0, Math.floor(totalSeconds));
+
   const hh = Math.floor(totalSeconds / 3600);
   const mm = Math.floor((totalSeconds % 3600) / 60);
   const ss = totalSeconds % 60;
@@ -13,78 +14,100 @@ function formatSeconds(totalSeconds) {
 
 function parseValue(value) {
   if (value === "" || value === null || value === undefined) return null;
+
   const n = Number(value);
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null;
+  if (!Number.isFinite(n)) return null;
+
+  return Math.max(0, Math.floor(n));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   const player = document.getElementById("videoPlayer");
   const form = document.getElementById("clipForm");
 
+  if (!player || !form) return;
+
   const currentSecondsInput = document.getElementById("current_seconds");
   const startSecondsInput = document.getElementById("start_seconds");
   const endSecondsInput = document.getElementById("end_seconds");
 
-  const currentTimeLabel = document.getElementById("currentTimeLabel");
   const startTimeLabel = document.getElementById("startTimeLabel");
   const endTimeLabel = document.getElementById("endTimeLabel");
-  const durationLabel = document.getElementById("durationLabel");
 
   const markStartBtn = document.getElementById("markStartBtn");
   const markEndBtn = document.getElementById("markEndBtn");
   const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+  const generateClipBtn = document.getElementById("generateClipBtn");
 
   const latestClipCard = document.getElementById("latestClipCard");
   const toggleLatestClipBtn = document.getElementById("toggleLatestClipBtn");
   const closeLatestClipBtn = document.getElementById("closeLatestClipBtn");
 
-  if (toggleLatestClipBtn && latestClipCard) {
-    toggleLatestClipBtn.addEventListener("click", () => {
-      const isHidden = latestClipCard.classList.contains("clip-card-hidden");
-
-      if (isHidden) {
-        latestClipCard.classList.remove("clip-card-hidden");
-        toggleLatestClipBtn.innerHTML = `
-          <i class="fa-solid fa-eye-slash"></i>
-          <span>Ocultar último clipe</span>
-        `;
-      } else {
-        latestClipCard.classList.add("clip-card-hidden");
-        toggleLatestClipBtn.innerHTML = `
-          <i class="fa-solid fa-film"></i>
-          <span>Ver último clipe</span>
-        `;
-      }
-    });
-  }
-
-  if (closeLatestClipBtn && latestClipCard && toggleLatestClipBtn) {
-    closeLatestClipBtn.addEventListener("click", () => {
-      latestClipCard.classList.add("clip-card-hidden");
-      toggleLatestClipBtn.innerHTML = `
-        <i class="fa-solid fa-film"></i>
-        <span>Ver último clipe</span>
-      `;
-    });
-  }
-
-  if (!player || !form) return;
+  let isSubmitting = false;
 
   function getCurrent() {
     return Math.max(0, Math.floor(player.currentTime || 0));
   }
 
-  function refreshCurrentTime() {
-    const current = getCurrent();
-    if (currentTimeLabel) {
-      currentTimeLabel.textContent = formatSeconds(current);
-    }
-    currentSecondsInput.value = current;
+  function getStart() {
+    return parseValue(startSecondsInput.value);
   }
 
-  function refreshMarkers() {
-    const start = parseValue(startSecondsInput.value);
-    const end = parseValue(endSecondsInput.value);
+  function getEnd() {
+    return parseValue(endSecondsInput.value);
+  }
+
+  function hasValidRange() {
+    const start = getStart();
+    const end = getEnd();
+
+    return start !== null && end !== null && start !== end;
+  }
+
+  function getOrderedRange() {
+    const start = getStart();
+    const end = getEnd();
+
+    if (start === null || end === null) return null;
+
+    return {
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+    };
+  }
+
+  function setButtonState(button, isActive) {
+    if (!button) return;
+
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  }
+
+  function updateGenerateButton() {
+    if (!generateClipBtn) return;
+
+    const valid = hasValidRange();
+
+    generateClipBtn.disabled = !valid || isSubmitting;
+    generateClipBtn.classList.toggle("is-disabled", !valid || isSubmitting);
+
+    if (isSubmitting) {
+      generateClipBtn.innerHTML = `
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        <span>Gerando...</span>
+      `;
+      return;
+    }
+
+    generateClipBtn.innerHTML = `
+      <i class="fa-solid fa-scissors"></i>
+      <span>Gerar clipe</span>
+    `;
+  }
+
+  function updateLabels() {
+    const start = getStart();
+    const end = getEnd();
 
     if (startTimeLabel) {
       startTimeLabel.textContent = start === null ? "não definido" : formatSeconds(start);
@@ -94,85 +117,220 @@ document.addEventListener("DOMContentLoaded", () => {
       endTimeLabel.textContent = end === null ? "não definido" : formatSeconds(end);
     }
 
-    if (durationLabel) {
-      if (start !== null && end !== null) {
-        const realStart = Math.min(start, end);
-        const realEnd = Math.max(start, end);
-        durationLabel.textContent = `${realEnd - realStart}s`;
-      } else {
-        durationLabel.textContent = "0s";
-      }
-    }
+    setButtonState(markStartBtn, start !== null);
+    setButtonState(markEndBtn, end !== null);
+    updateGenerateButton();
+  }
+
+  function syncCurrentTime() {
+    currentSecondsInput.value = getCurrent();
   }
 
   function markStart() {
     const current = getCurrent();
-    currentSecondsInput.value = current;
     startSecondsInput.value = current;
-    refreshCurrentTime();
-    refreshMarkers();
+    syncCurrentTime();
+    updateLabels();
   }
 
   function markEnd() {
     const current = getCurrent();
-    currentSecondsInput.value = current;
     endSecondsInput.value = current;
-    refreshCurrentTime();
-    refreshMarkers();
+    syncCurrentTime();
+    updateLabels();
   }
 
   function clearSelection() {
     startSecondsInput.value = "";
     endSecondsInput.value = "";
-    refreshMarkers();
+    syncCurrentTime();
+    updateLabels();
   }
 
-  markStartBtn.addEventListener("click", markStart);
-  markEndBtn.addEventListener("click", markEnd);
-  clearSelectionBtn.addEventListener("click", clearSelection);
+  function seekBy(seconds) {
+    if (!player || !Number.isFinite(player.duration)) return;
 
-  player.addEventListener("timeupdate", refreshCurrentTime);
-  player.addEventListener("loadedmetadata", refreshCurrentTime);
+    const nextTime = Math.min(
+      Math.max((player.currentTime || 0) + seconds, 0),
+      player.duration
+    );
+
+    player.currentTime = nextTime;
+    syncCurrentTime();
+  }
+
+  function pauseBeforeMark() {
+    if (!player.paused) {
+      player.pause();
+    }
+  }
+
+  function validateBeforeSubmit(showAlert = true) {
+    const start = getStart();
+    const end = getEnd();
+
+    if (start === null || end === null) {
+      if (showAlert) {
+        alert("Marque o início e o fim antes de gerar o clipe.");
+      }
+      return false;
+    }
+
+    if (start === end) {
+      if (showAlert) {
+        alert("O início e o fim não podem ser iguais.");
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  function normalizeRangeBeforeSubmit() {
+    const range = getOrderedRange();
+    if (!range) return;
+
+    startSecondsInput.value = range.start;
+    endSecondsInput.value = range.end;
+  }
+
+  function toggleLatestClip(show) {
+    if (!toggleLatestClipBtn || !latestClipCard) return;
+
+    const shouldShow = typeof show === "boolean"
+      ? show
+      : latestClipCard.classList.contains("clip-card-hidden");
+
+    latestClipCard.classList.toggle("clip-card-hidden", !shouldShow);
+
+    toggleLatestClipBtn.innerHTML = shouldShow
+      ? `
+        <i class="fa-solid fa-eye-slash"></i>
+        <span>Ocultar último clipe</span>
+      `
+      : `
+        <i class="fa-solid fa-film"></i>
+        <span>Ver último clipe</span>
+      `;
+  }
+
+  if (toggleLatestClipBtn && latestClipCard) {
+    toggleLatestClipBtn.addEventListener("click", () => {
+      toggleLatestClip();
+    });
+  }
+
+  if (closeLatestClipBtn) {
+    closeLatestClipBtn.addEventListener("click", () => {
+      toggleLatestClip(false);
+    });
+  }
+
+  markStartBtn?.addEventListener("click", () => {
+    pauseBeforeMark();
+    markStart();
+  });
+
+  markEndBtn?.addEventListener("click", () => {
+    pauseBeforeMark();
+    markEnd();
+  });
+
+  clearSelectionBtn?.addEventListener("click", clearSelection);
+
+  player.addEventListener("loadedmetadata", () => {
+    syncCurrentTime();
+    updateLabels();
+  });
+
+  player.addEventListener("timeupdate", syncCurrentTime);
+
+  player.addEventListener("play", () => {
+    syncCurrentTime();
+  });
+
+  player.addEventListener("pause", () => {
+    syncCurrentTime();
+  });
 
   document.addEventListener("keydown", (event) => {
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag === "input" || tag === "textarea") return;
 
-    if (event.key.toLowerCase() === "s") {
+    const key = event.key.toLowerCase();
+
+    if (key === "s") {
       event.preventDefault();
+      pauseBeforeMark();
       markStart();
+      return;
     }
 
-    if (event.key.toLowerCase() === "e") {
+    if (key === "e") {
       event.preventDefault();
+      pauseBeforeMark();
       markEnd();
+      return;
     }
 
-    if (event.key.toLowerCase() === "g") {
+    if (key === "arrowleft") {
       event.preventDefault();
-      form.submit();
+      seekBy(-1);
+      return;
+    }
+
+    if (key === "arrowright") {
+      event.preventDefault();
+      seekBy(1);
+      return;
+    }
+
+    if (key === ",") {
+      event.preventDefault();
+      seekBy(-5);
+      return;
+    }
+
+    if (key === ".") {
+      event.preventDefault();
+      seekBy(5);
+      return;
+    }
+
+    if (key === " ") {
+      event.preventDefault();
+
+      if (player.paused) {
+        player.play().catch(() => {});
+      } else {
+        player.pause();
+      }
+      return;
+    }
+
+    if (key === "g") {
+      event.preventDefault();
+
+      if (!validateBeforeSubmit(true)) return;
+
+      normalizeRangeBeforeSubmit();
+      form.requestSubmit();
     }
   });
 
   form.addEventListener("submit", (event) => {
-    const start = parseValue(startSecondsInput.value);
-    const end = parseValue(endSecondsInput.value);
+    syncCurrentTime();
 
-    currentSecondsInput.value = getCurrent();
-
-    if (start === null || end === null) {
+    if (!validateBeforeSubmit(true)) {
       event.preventDefault();
-      alert("Marque o início e o fim antes de gerar o clip.");
       return;
     }
 
-    if (start === end) {
-      event.preventDefault();
-      alert("O início e o fim não podem ser iguais.");
-      return;
-    }
+    normalizeRangeBeforeSubmit();
+    isSubmitting = true;
+    updateGenerateButton();
   });
 
-  refreshCurrentTime();
-  refreshMarkers();
+  updateLabels();
+  syncCurrentTime();
 });

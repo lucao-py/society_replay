@@ -2,49 +2,112 @@
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Replay Society</title>
+
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
-  <main class="container">
-    <h1>Replay Society</h1>
-    <p class="subtitle">Selecione o vídeo que deseja assistir.</p>
-
-    <form method="post" action="{{ url_for('sync_drive') }}" style="margin-bottom: 24px;">
-      <button class="button" type="submit">Sincronizar vídeos do Drive</button>
-    </form>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div style="display: grid; gap: 12px; margin-bottom: 20px;">
-          {% for category, message in messages %}
-            <div class="card" style="border-color: {% if category == 'error' %}#ef4444{% else %}#2f7df6{% endif %};">
-              {{ message }}
-            </div>
-          {% endfor %}
+  <main class="page">
+    <div class="container">
+      <header class="page-header home-header">
+        <div class="page-title-wrap">
+          <p class="eyebrow">Replay Society</p>
+          <h1 class="page-title">Seus vídeos, prontos para replay e corte</h1>
+          <p class="subtitle home-subtitle">
+            Selecione o vídeo que deseja assistir, revisar e transformar em clipe.
+          </p>
         </div>
-      {% endif %}
-    {% endwith %}
 
-    {% if not games %}
-      <div class="card">
-        <p>Nenhum vídeo encontrado.</p>
-        <p class="muted">Suba um vídeo na pasta do Google Drive e clique em “Sincronizar vídeos do Drive”.</p>
-      </div>
-    {% else %}
-      <div class="list">
-        {% for game in games %}
-          <div class="card row">
+        <form method="post" action="{{ url_for('sync_drive') }}" class="sync-form">
+          <button class="button sync-button" type="submit">
+            <i class="fa-solid fa-arrows-rotate"></i>
+            <span>Sincronizar vídeos do Drive</span>
+          </button>
+        </form>
+      </header>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <section class="flash-list" aria-label="Mensagens do sistema">
+            {% for category, message in messages %}
+              <div class="flash-card flash-{{ category }}">
+                <div class="flash-icon">
+                  {% if category == 'error' %}
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                  {% else %}
+                    <i class="fa-solid fa-circle-check"></i>
+                  {% endif %}
+                </div>
+
+                <div class="flash-content">
+                  <p class="flash-title">
+                    {% if category == 'error' %}
+                      Ocorreu um problema
+                    {% else %}
+                      Ação concluída
+                    {% endif %}
+                  </p>
+                  <p class="flash-message">{{ message }}</p>
+                </div>
+              </div>
+            {% endfor %}
+          </section>
+        {% endif %}
+      {% endwith %}
+
+      {% if not games %}
+        <section class="empty-state card">
+          <div class="empty-state-icon">
+            <i class="fa-solid fa-film"></i>
+          </div>
+
+          <div class="empty-state-content">
+            <h2>Nenhum vídeo encontrado</h2>
+            <p class="muted">
+              Suba um vídeo na pasta do Google Drive e clique em
+              “Sincronizar vídeos do Drive”.
+            </p>
+          </div>
+        </section>
+      {% else %}
+        <section class="library-section">
+          <div class="section-header">
             <div>
-              <div class="video-name">{{ game.file_name }}</div>
-            </div>
-            <div>
-              <a class="button" href="{{ url_for('video_page', game_id=game.id) }}">Abrir</a>
+              <h2>Biblioteca de vídeos</h2>
+              <p class="section-subtitle">
+                Escolha um vídeo para assistir, revisar a timeline e gerar um clipe.
+              </p>
             </div>
           </div>
-        {% endfor %}
-      </div>
-    {% endif %}
+
+          <div class="video-list">
+            {% for game in games %}
+              <article class="video-card">
+                <div class="video-card-main">
+                  <div class="video-card-icon">
+                    <i class="fa-solid fa-play"></i>
+                  </div>
+
+                  <div class="video-card-content">
+                    <p class="video-card-label">Vídeo disponível</p>
+                    <h3 class="video-name">{{ game.file_name }}</h3>
+                  </div>
+                </div>
+
+                <div class="video-card-actions">
+                  <a class="button video-open-btn" href="{{ url_for('video_page', game_id=game.id) }}">
+                    <span>Abrir</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                  </a>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    </div>
   </main>
 </body>
 </html>

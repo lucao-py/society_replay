@@ -344,5 +344,33 @@ function syncWithAdminKey() {
     return;
   }
 
-  document.getElementById("syncForm").submit();
+  const btn = document.getElementById("syncBtn");
+
+  // muda estado do botão
+  btn.disabled = true;
+  btn.innerHTML = `
+    <i class="fa-solid fa-spinner fa-spin"></i>
+    <span>Sincronizando...</span>
+  `;
+
+  fetch("/sync-drive", {
+    method: "POST"
+  })
+  .then(() => {
+    alert("Sincronização iniciada 🚀");
+
+    // opcional: volta botão ao normal depois de X segundos
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <i class="fa-solid fa-arrows-rotate"></i>
+        <span>Sincronizar vídeos do Drive</span>
+      `;
+    }, 5000);
+  })
+  .catch(() => {
+    alert("Erro ao iniciar");
+
+    btn.disabled = false;
+  });
 }

@@ -1,5 +1,7 @@
 from pathlib import Path
 import os
+import threading
+from flask import jsonify
 
 def setup_google_credentials():
     raw_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -52,7 +54,21 @@ def ensure_storage():
 ensure_storage()
 app.secret_key = "replay-society-secret-key"
 
+def run_sync():
+    try:
+        result = sync_videos_from_drive()
 
+        downloaded_count = len(result["downloaded"])
+        skipped_count = len(result["skipped"])
+        ignored_count = len(result["ignored"])
+
+        print(
+            f"[SYNC] Concluído | novos: {downloaded_count}, "
+            f"existentes: {skipped_count}, ignorados: {ignored_count}"
+        )
+
+    except Exception as e:
+        print(f"[SYNC ERROR] {e}")
 
 
 def bootstrap():
@@ -83,25 +99,10 @@ def index():
 
 @app.route("/sync-drive", methods=["POST"])
 def sync_drive():
-    try:
-        result = sync_videos_from_drive()
+    thread = threading.Thread(target=run_sync)
+    thread.start()
 
-        downloaded_count = len(result["downloaded"])
-        skipped_count = len(result["skipped"])
-        ignored_count = len(result["ignored"])
-
-        flash(
-            f"Sincronização concluída. "
-            f"Novos vídeos: {downloaded_count}, "
-            f"já existentes: {skipped_count}, "
-            f"ignorados: {ignored_count}.",
-            "success",
-        )
-
-    except Exception as e:
-        flash(f"Erro ao sincronizar vídeos do Drive: {str(e)}", "error")
-
-    return redirect(url_for("index"))
+    return jsonify({"status": "processing"})
 
 
 @app.route("/video/<game_id>")

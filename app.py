@@ -1,4 +1,18 @@
 from pathlib import Path
+import os
+
+def setup_google_credentials():
+    raw_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+
+    if not raw_json:
+        return
+
+    cred_path = Path("/tmp/service_account.json")
+    cred_path.write_text(raw_json, encoding="utf-8")
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred_path)
+    os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = str(cred_path)
+
+setup_google_credentials()
 
 from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash
 
@@ -18,20 +32,9 @@ from src.preview_service import get_preview_path, create_preview
 from src.ffmpeg_service import create_clip
 from src.drive_sync_service import sync_videos_from_drive
 from src.utils import format_seconds
-import os
 
-def setup_google_credentials():
-    raw_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
 
-    if not raw_json:
-        return
 
-    cred_path = Path("/tmp/service_account.json")
-    cred_path.write_text(raw_json, encoding="utf-8")
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(cred_path)
-    os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"] = str(cred_path)
-
-setup_google_credentials()
 app = Flask(__name__)
 
 def ensure_storage():

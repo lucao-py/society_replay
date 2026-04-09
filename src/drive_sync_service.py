@@ -21,12 +21,16 @@ def _build_drive_service():
     if not GOOGLE_DRIVE_FOLDER_ID:
         raise ValueError("GOOGLE_DRIVE_FOLDER_ID não configurado no .env")
 
-    service_account_path = Path(GOOGLE_SERVICE_ACCOUNT_FILE)
-    if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"Arquivo da service account não encontrado: {service_account_path}"
-        )
+    service_account_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
 
+    if not service_account_file:
+        raise ValueError("GOOGLE_SERVICE_ACCOUNT_FILE não definido no .env")
+
+    service_account_path = Path(service_account_file)
+    
+    if not service_account_path.exists():
+        raise FileNotFoundError(f"Arquivo de credenciais não encontrado: {service_account_path}")
+    
     creds = Credentials.from_service_account_file(
         str(service_account_path),
         scopes=SCOPES,

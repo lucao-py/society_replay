@@ -20,7 +20,21 @@ from src.drive_sync_service import sync_videos_from_drive
 from src.utils import format_seconds
 
 app = Flask(__name__)
+
+def ensure_storage():
+    for path in [VIDEOS_DIR, PREVIEWS_DIR, CLIPS_DIR, METADATA_DIR]:
+        Path(path).mkdir(parents=True, exist_ok=True)
+
+    if not GAMES_JSON.exists():
+        GAMES_JSON.write_text("[]", encoding="utf-8")
+
+    if not CLIPS_JSON.exists():
+        CLIPS_JSON.write_text("[]", encoding="utf-8")
+
+ensure_storage()
 app.secret_key = "replay-society-secret-key"
+
+
 
 
 def bootstrap():

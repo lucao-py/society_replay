@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>{{ game.file_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <a class="button back-link" href="{{ url_for('index') }}">
+  Voltar
+  </a>
+
+    <h1>{{ game.file_name }}</h1>
+
+    <div class="player-card">
+      <video id="videoPlayer" class="video-player" controls preload="metadata">
+        <source src="{{ preview_url }}" type="video/mp4">
+        Seu navegador não suporta vídeo.
+      </video>
+    </div>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <form id="clipForm" method="post" action="{{ url_for('generate_clip', game_id=game.id) }}">
+      <input type="hidden" name="current_seconds" id="current_seconds" value="0">
+      <input type="hidden" name="start_seconds" id="start_seconds" value="">
+      <input type="hidden" name="end_seconds" id="end_seconds" value="">
+
+      <div class="clip-toolbar">
+        <button type="button" class="clip-btn clip-btn-dark" id="markStartBtn">
+          <i class="fa-regular fa-flag"></i>
+          <span>Início</span>
+        </button>
+
+        <button type="button" class="clip-btn clip-btn-dark" id="markEndBtn">
+          <i class="fa-solid fa-flag-checkered"></i>
+          <span>Fim</span>
+        </button>
+
+        <button type="button" class="clip-btn clip-btn-dark clip-btn-icon" id="clearSelectionBtn" title="Limpar seleção">
+          <i class="fa-regular fa-trash-can"></i>
+        </button>
+
+        <button type="submit" class="clip-btn clip-btn-primary" id="generateClipBtn">
+          <i class="fa-solid fa-scissors"></i>
+          <span>Gerar clipe</span>
+        </button>
+      </div>
+    </form>
+
+    <div class="info-card">
+      <p><strong>Início:</strong> <span id="startTimeLabel">não definido</span></p>
+      <p><strong>Fim:</strong> <span id="endTimeLabel">não definido</span></p>
+    </div>
+
+    {% if latest_clip %}
+    <div class="clip-result-actions">
+      <button type="button" class="clip-btn clip-btn-dark" id="toggleLatestClipBtn">
+        <i class="fa-solid fa-film"></i>
+        <span>Ver último clipe</span>
+      </button>
+    </div>
+
+    <div class="clip-card clip-card-hidden" id="latestClipCard">
+      <div class="clip-card-header">
+        <h2>Último clipe gerado</h2>
+        <button type="button" class="clip-close-btn" id="closeLatestClipBtn" aria-label="Fechar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <video class="video-player" controls preload="metadata">
+        <source src="{{ url_for('download_clip', clip_id=latest_clip.id) }}" type="video/mp4">
+      </video>
+
+      <a class="button full" href="{{ url_for('download_clip', clip_id=latest_clip.id) }}">
+        Baixar clipe
+      </a>
+    </div>
+  {% endif %}
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

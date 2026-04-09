@@ -1,0 +1,43 @@
+# 🔐 Credenciais
+service_account.json
+*.pem
+.env
+
+# 🧠 Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 🐍 Virtual env
+venv/
+.venv/
+env/
+
+# 📦 Dependências locais
+*.egg-info/
+dist/
+build/
+
+# 📁 Dados pesados (SEU CASO MAIS IMPORTANTE)
+data/
+storage/
+*.mp4
+*.mov
+*.mkv
+*.avi
+
+# 📊 Logs
+*.log
+
+# 🧪 Testes / cache
+.pytest_cache/
+.coverage
+
+# 🧰 IDE
+.vscode/
+.idea/
+
+# 🖥️ OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Replay Society</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="container">
+    <h1>Replay Society</h1>
+    <p class="subtitle">Selecione o vídeo que deseja assistir.</p>
+
+    <form method="post" action="{{ url_for('sync_drive') }}" style="margin-bottom: 24px;">
+      <button class="button" type="submit">Sincronizar vídeos do Drive</button>
+    </form>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="display: grid; gap: 12px; margin-bottom: 20px;">
+          {% for category, message in messages %}
+            <div class="card" style="border-color: {% if category == 'error' %}#ef4444{% else %}#2f7df6{% endif %};">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if not games %}
+      <div class="card">
+        <p>Nenhum vídeo encontrado.</p>
+        <p class="muted">Suba um vídeo na pasta do Google Drive e clique em “Sincronizar vídeos do Drive”.</p>
+      </div>
+    {% else %}
+      <div class="list">
+        {% for game in games %}
+          <div class="card row">
+            <div>
+              <div class="video-name">{{ game.file_name }}</div>
+            </div>
+            <div>
+              <a class="button" href="{{ url_for('video_page', game_id=game.id) }}">Abrir</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </main>
+</body>
+</html>

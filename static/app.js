@@ -334,3 +334,15 @@ document.addEventListener("DOMContentLoaded", () => {
   updateLabels();
   syncCurrentTime();
 });
+
+
+function syncWithAdminKey() {
+  const key = prompt("Digite o código:");
+
+  if (key !== "lucas123") {
+    alert("Acesso negado");
+    return;
+  }
+
+  document.getElementById("syncForm").submit();
+}

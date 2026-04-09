@@ -795,3 +795,39 @@ p {
     min-width: 0;
   }
 }
+
+.hidden-sync {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 50;
+}
+
+.sync-fab {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9fb0c8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  opacity: 0.35;
+  transition: all 0.2s ease;
+}
+
+/* quando passa o mouse */
+.sync-fab:hover {
+  opacity: 0.8;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  transform: scale(1.05);
+}
+
+/* quando clica */
+.sync-fab:active {
+  transform: scale(0.95);
+}

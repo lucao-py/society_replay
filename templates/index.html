@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
   <main class="page">
     <div class="container">
       <header class="page-header home-header">
@@ -20,12 +21,12 @@
           </p>
         </div>
 
-        <form method="post" action="{{ url_for('sync_drive') }}" class="sync-form">
+        <!-- <form method="post" action="{{ url_for('sync_drive') }}" class="sync-form">
           <button class="button sync-button" type="submit">
             <i class="fa-solid fa-arrows-rotate"></i>
             <span>Sincronizar vídeos do Drive</span>
           </button>
-        </form>
+        </form> -->
       </header>
 
       {% with messages = get_flashed_messages(with_categories=true) %}
@@ -108,6 +109,15 @@
         </section>
       {% endif %}
     </div>
+
+    <form method="post" action="{{ url_for('sync_drive') }}" id="syncForm" class="hidden-sync">
+      <button type="button" class="sync-fab" onclick="syncWithAdminKey()" title="Sync">
+        <i class="fa-solid fa-arrows-rotate"></i>
+      </button>
+    </form>
+
+
+    
   </main>
 </body>
 </html>

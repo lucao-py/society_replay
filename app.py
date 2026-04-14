@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 import threading
-from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_file, send_from_directory, abort, flash, jsonify
 from src.preview_service import get_preview_path, preview_exists
 from src.job_service import create_clip_job, create_preview_job, get_job
 from datetime import datetime
@@ -297,8 +297,13 @@ def serve_preview(game_id):
     if not preview_path.exists():
         abort(404)
 
-    return send_file(preview_path, mimetype="video/mp4", conditional=True)
-
+    return send_from_directory(
+        PREVIEWS_DIR,
+        preview_path.name,
+        mimetype="video/mp4",
+        conditional=True,
+        max_age=3600,
+    )
 @app.route("/generate_preview/<game_id>", methods=["POST"])
 def generate_preview(game_id):
     game = get_game_by_id(game_id)
@@ -364,13 +369,25 @@ def download_clip(clip_id):
     if not clip_path.exists():
         abort(404)
 
-    return send_file(clip_path, mimetype="video/mp4", as_attachment=True, download_name=clip_path.name)
-
+    return send_from_directory(
+        CLIPS_DIR,
+        clip_path.name,
+        mimetype="video/mp4",
+        as_attachment=True,
+        download_name=clip_path.name,
+        conditional=True,
+        max_age=3600,
+    )
 
 @app.context_processor
 def inject_helpers():
     return {"format_seconds": format_seconds}
 
+@app.after_request
+def add_cache_headers(response):
+    if request.path.startswith("/media/preview/") or request.path.startswith("/download_clip/"):
+        response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

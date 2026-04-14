@@ -85,7 +85,7 @@ function startSyncPolling() {
     fetchSyncStatus().catch(() => {
       stopSyncPolling();
     });
-  }, 2000);
+  }, 5000);
 }
 
 function stopSyncPolling() {
@@ -484,7 +484,7 @@ document.addEventListener("DOMContentLoaded", () => {
         updateGenerateButton();
         setStatus(error.message || "Erro ao acompanhar processamento.", "error");
       });
-    }, 2000);
+    }, 5000);
 
     checkJobStatus().catch((error) => {
       stopPolling();
@@ -584,7 +584,7 @@ document.addEventListener("DOMContentLoaded", () => {
         stopPreviewPolling();
         setStatus(error.message || "Erro ao acompanhar preview.", "error");
       });
-    }, 2000);
+    }, 5000);
 
     checkPreviewStatus().catch((error) => {
       stopPreviewPolling();
@@ -761,4 +761,23 @@ document.addEventListener("DOMContentLoaded", () => {
   updateLabels();
   syncCurrentTime();
   ensurePreviewReady();
+
+  document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopPolling();
+        stopPreviewPolling();
+        stopSyncPolling();
+        return;
+      }
+
+      if (currentJobId) {
+        startPolling(currentJobId);
+      }
+
+      if (currentPreviewJobId) {
+        startPreviewPolling(currentPreviewJobId);
+      }
+
+      fetchSyncStatus().catch(() => {});
+    });
 });

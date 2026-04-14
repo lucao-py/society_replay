@@ -26,13 +26,13 @@ def create_preview(source_video: Path | str) -> Path:
     "-i",
     str(source_video),
     "-vf",
-    "scale=-2:360",
+    "scale=-2:480",
     "-c:v",
     "libx264",
     "-preset",
-    "ultrafast",
+    "veryfast",
     "-crf",
-    "35",
+    "28",
     "-g",
     "30",
     "-keyint_min",
@@ -42,9 +42,9 @@ def create_preview(source_video: Path | str) -> Path:
     "-c:a",
     "aac",
     "-b:a",
-    "48k",
+    "64k",
     str(preview_path),
-]
+    ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 

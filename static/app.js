@@ -95,7 +95,47 @@ function stopSyncPolling() {
   }
 }
 
+let adminUnlocked = false;
+
+function openAdminPanel() {
+  const panel = document.getElementById("adminPanel");
+  if (panel) {
+    panel.hidden = false;
+  }
+}
+
+function closeAdminPanel() {
+  const panel = document.getElementById("adminPanel");
+  if (panel) {
+    panel.hidden = true;
+  }
+}
+
+async function postAdminAction(url, successMessage = "Ação executada com sucesso.") {
+  const response = await fetch(url, { method: "POST" });
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    const rawText = await response.text();
+    console.error("Resposta inesperada:", rawText);
+    throw new Error("O servidor não retornou JSON.");
+  }
+
+  const data = await response.json();
+
+  if (!response.ok || !data.ok) {
+    throw new Error(data.message || "Erro ao executar ação.");
+  }
+
+  return data.message || successMessage;
+}
+
 function syncWithAdminKey() {
+  if (adminUnlocked) {
+    openAdminPanel();
+    return;
+  }
+
   const key = prompt("Digite o código:");
 
   if (key !== "lucas123") {
@@ -103,51 +143,73 @@ function syncWithAdminKey() {
     return;
   }
 
+  adminUnlocked = true;
+  openAdminPanel();
+}
+
+async function adminSync() {
+  try {
+    const message = await postAdminAction("/sync-drive", "Sincronização iniciada.");
     const card = document.getElementById("syncStatusCard");
-  if (card) {
-    card.hidden = false;
-  }
-  const btn = document.getElementById("syncBtn");
-
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = `
-      <i class="fa-solid fa-spinner fa-spin"></i>
-    `;
-  }
-
-fetch("/sync-drive", {
-  method: "POST"
-})
-  .then(async (response) => {
-    const contentType = response.headers.get("content-type") || "";
-
-    if (!contentType.includes("application/json")) {
-      const rawText = await response.text();
-      console.error("Resposta inesperada do /sync-drive:", rawText);
-      throw new Error("O servidor não retornou JSON no /sync-drive.");
-    }
-
-    const data = await response.json();
-
-    if (!response.ok || !data.ok) {
-      throw new Error(data.message || "Erro ao iniciar sincronização.");
+    if (card) {
+      card.hidden = false;
     }
 
     startSyncPolling();
-    return fetchSyncStatus();
-  })
-    .catch((error) => {
-      alert(error.message || "Erro ao iniciar");
-    })
-    .finally(() => {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = `
-          <i class="fa-solid fa-arrows-rotate"></i>
-        `;
-      }
-    });
+    fetchSyncStatus().catch(() => {});
+    alert(message);
+  } catch (error) {
+    alert(error.message || "Erro ao iniciar sincronização.");
+  }
+}
+
+async function adminClearPreviews() {
+  const confirmed = confirm("Tem certeza que deseja apagar todas as previews?");
+  if (!confirmed) return;
+
+  try {
+    const message = await postAdminAction("/admin/clear-previews");
+    alert(message);
+  } catch (error) {
+    alert(error.message || "Erro ao apagar previews.");
+  }
+}
+
+async function adminRegeneratePreviews() {
+  const confirmed = confirm("Tem certeza que deseja regenerar as previews?");
+  if (!confirmed) return;
+
+  try {
+    const message = await postAdminAction("/admin/regenerate-previews");
+    alert(message);
+  } catch (error) {
+    alert(error.message || "Erro ao regenerar previews.");
+  }
+}
+
+async function adminClearClips() {
+  const confirmed = confirm("Tem certeza que deseja apagar todos os clipes?");
+  if (!confirmed) return;
+
+  try {
+    const message = await postAdminAction("/admin/clear-clips");
+    alert(message);
+  } catch (error) {
+    alert(error.message || "Erro ao apagar clipes.");
+  }
+}
+
+async function adminDeleteVideo(gameId, fileName) {
+  const confirmed = confirm(`Tem certeza que deseja deletar o vídeo "${fileName}"?`);
+  if (!confirmed) return;
+
+  try {
+    const message = await postAdminAction(`/admin/delete-video/${gameId}`);
+    alert(message);
+    window.location.reload();
+  } catch (error) {
+    alert(error.message || "Erro ao deletar vídeo.");
+  }
 }
 
 

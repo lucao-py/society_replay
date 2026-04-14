@@ -1,9 +1,8 @@
 from pathlib import Path
 import os
 import threading
-from flask import Flask, render_template, request, redirect, url_for, send_file, send_from_directory, abort, flash, jsonify
-from src.preview_service import get_preview_path, preview_exists
-from src.job_service import create_clip_job, create_preview_job, get_job
+import shutil
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, abort, flash, jsonify
 from datetime import datetime
 
 def setup_google_credentials():
@@ -19,7 +18,6 @@ def setup_google_credentials():
 
 setup_google_credentials()
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash
 
 from src.config import (
     VIDEOS_DIR,
@@ -34,10 +32,10 @@ from src.config import (
 )
 from src.storage import ensure_dir, ensure_json_file, read_json, write_json
 from src.game_service import sync_games_from_videos, list_games, get_game_by_id
-from src.preview_service import get_preview_path, create_preview
 from src.drive_sync_service import sync_videos_from_drive
 from src.utils import format_seconds
-from src.job_service import create_clip_job, get_job
+from src.preview_service import get_preview_path, preview_exists
+from src.job_service import create_clip_job, create_preview_job, get_job
 
 
 
@@ -287,6 +285,117 @@ def latest_clip(game_id):
         }
     )
 
+@app.route("/admin/clear-previews", methods=["POST"])
+def clear_previews():
+    try:
+        if PREVIEWS_DIR.exists():
+            shutil.rmtree(PREVIEWS_DIR)
+
+        PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+
+        return jsonify({
+            "ok": True,
+            "message": "Previews apagados com sucesso."
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "message": f"Erro ao apagar previews: {e}"
+        }), 500
+
+
+@app.route("/admin/regenerate-previews", methods=["POST"])
+def regenerate_previews():
+    try:
+        games = list_games()
+        created_jobs = 0
+
+        for game in games:
+            source_file = Path(game["file_path"])
+            if not source_file.exists():
+                continue
+
+            preview_path = get_preview_path(source_file.resolve())
+            if preview_path.exists():
+                preview_path.unlink()
+
+            create_preview_job(game)
+            created_jobs += 1
+
+        return jsonify({
+            "ok": True,
+            "message": f"Regeneração iniciada para {created_jobs} vídeo(s).",
+            "jobs_created": created_jobs,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "message": f"Erro ao regenerar previews: {e}"
+        }), 500
+    
+@app.route("/admin/delete-video/<game_id>", methods=["POST"])
+def delete_video(game_id):
+    try:
+        game = get_game_by_id(game_id)
+        if not game:
+            return jsonify({
+                "ok": False,
+                "message": "Vídeo não encontrado."
+            }), 404
+
+        source_file = Path(game["file_path"])
+        preview_path = get_preview_path(source_file.resolve())
+
+        if source_file.exists():
+            source_file.unlink()
+
+        if preview_path.exists():
+            preview_path.unlink()
+
+        games = read_json(GAMES_JSON, [])
+        games = [g for g in games if g["id"] != game_id]
+        write_json(GAMES_JSON, games)
+
+        clips = read_json(CLIPS_JSON, [])
+        clips_to_remove = [c for c in clips if c["game_id"] == game_id]
+
+        for clip in clips_to_remove:
+            clip_path = Path(clip["clip_file"])
+            if clip_path.exists():
+                clip_path.unlink()
+
+        clips = [c for c in clips if c["game_id"] != game_id]
+        write_json(CLIPS_JSON, clips)
+
+        return jsonify({
+            "ok": True,
+            "message": f"Vídeo '{game['file_name']}' removido com sucesso."
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "message": f"Erro ao deletar vídeo: {e}"
+        }), 500
+    
+@app.route("/admin/clear-clips", methods=["POST"])
+def clear_clips():
+    try:
+        if CLIPS_DIR.exists():
+            for file_path in CLIPS_DIR.iterdir():
+                if file_path.is_file():
+                    file_path.unlink()
+
+        write_json(CLIPS_JSON, [])
+
+        return jsonify({
+            "ok": True,
+            "message": "Todos os clipes foram removidos com sucesso."
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "message": f"Erro ao limpar clipes: {e}"
+        }), 500   
 @app.route("/media/preview/<game_id>")
 def serve_preview(game_id):
     game = get_game_by_id(game_id)

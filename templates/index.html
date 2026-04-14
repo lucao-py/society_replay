@@ -122,7 +122,55 @@
         </section>
       {% endif %}
     </div>
+    <section class="admin-panel" id="adminPanel" hidden>
+  <div class="admin-panel-header">
+    <strong>Painel admin</strong>
+    <button type="button" class="admin-close-btn" onclick="closeAdminPanel()">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
 
+  <div class="admin-actions">
+    <button type="button" class="button admin-action-btn" onclick="adminSync()">
+      <i class="fa-solid fa-arrows-rotate"></i>
+      <span>Sincronizar vídeos</span>
+    </button>
+
+    <button type="button" class="button admin-action-btn" onclick="adminClearPreviews()">
+      <i class="fa-solid fa-broom"></i>
+      <span>Apagar previews</span>
+    </button>
+
+    <button type="button" class="button admin-action-btn" onclick="adminRegeneratePreviews()">
+      <i class="fa-solid fa-photo-film"></i>
+      <span>Regenerar previews</span>
+    </button>
+
+    <button type="button" class="button admin-action-btn" onclick="adminClearClips()">
+      <i class="fa-solid fa-trash"></i>
+      <span>Apagar clipes</span>
+    </button>
+  </div>
+
+  {% if games %}
+  <div class="admin-video-list">
+    <p class="admin-section-title">Deletar vídeo</p>
+
+    <div class="admin-video-items">
+      {% for game in games %}
+        <button
+          type="button"
+          class="admin-video-delete-btn"
+          onclick="adminDeleteVideo('{{ game.id }}', '{{ game.file_name | e }}')"
+        >
+          <i class="fa-solid fa-trash-can"></i>
+          <span>{{ game.file_name }}</span>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
     <form method="post" action="{{ url_for('sync_drive') }}" id="syncForm" class="hidden-sync">
       <button type="button" class="sync-fab" id="syncBtn" onclick="syncWithAdminKey()" title="Sync">
         <i class="fa-solid fa-arrows-rotate"></i>

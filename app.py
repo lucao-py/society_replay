@@ -1,7 +1,10 @@
 from pathlib import Path
 import os
 import threading
-from flask import jsonify
+from flask import Flask, render_template, request, redirect, url_for, send_file, abort, flash, jsonify
+from src.preview_service import get_preview_path, preview_exists
+from src.job_service import create_clip_job, create_preview_job, get_job
+from datetime import datetime
 
 def setup_google_credentials():
     raw_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -25,19 +28,33 @@ from src.config import (
     METADATA_DIR,
     GAMES_JSON,
     CLIPS_JSON,
+    JOBS_JSON,
     PRESET_BEFORE,
     PRESET_AFTER,
 )
 from src.storage import ensure_dir, ensure_json_file, read_json, write_json
 from src.game_service import sync_games_from_videos, list_games, get_game_by_id
 from src.preview_service import get_preview_path, create_preview
-from src.ffmpeg_service import create_clip
 from src.drive_sync_service import sync_videos_from_drive
 from src.utils import format_seconds
+from src.job_service import create_clip_job, get_job
 
 
 
 app = Flask(__name__)
+
+SYNC_STATUS = {
+    "status": "idle",
+    "message": "Nenhuma sincronização em andamento.",
+    "started_at": None,
+    "finished_at": None,
+    "result": {
+        "downloaded": 0,
+        "skipped": 0,
+        "ignored": 0,
+    },
+    "error": None,
+}
 
 def ensure_storage():
     for path in [VIDEOS_DIR, PREVIEWS_DIR, CLIPS_DIR, METADATA_DIR]:
@@ -49,18 +66,50 @@ def ensure_storage():
     if not CLIPS_JSON.exists():
         CLIPS_JSON.write_text("[]", encoding="utf-8")
 
+    if not JOBS_JSON.exists():
+        JOBS_JSON.write_text("[]", encoding="utf-8")
+
 
 
 ensure_storage()
 app.secret_key = "replay-society-secret-key"
 
 def run_sync():
+    global SYNC_STATUS
+
     try:
+        SYNC_STATUS = {
+            "status": "processing",
+            "message": "Sincronização em andamento...",
+            "started_at": datetime.utcnow().isoformat(),
+            "finished_at": None,
+            "result": {
+                "downloaded": 0,
+                "skipped": 0,
+                "ignored": 0,
+            },
+            "error": None,
+        }
+
         result = sync_videos_from_drive()
+        sync_games_from_videos()
 
         downloaded_count = len(result["downloaded"])
         skipped_count = len(result["skipped"])
         ignored_count = len(result["ignored"])
+
+        SYNC_STATUS = {
+            "status": "done",
+            "message": "Sincronização concluída com sucesso.",
+            "started_at": SYNC_STATUS["started_at"],
+            "finished_at": datetime.utcnow().isoformat(),
+            "result": {
+                "downloaded": downloaded_count,
+                "skipped": skipped_count,
+                "ignored": ignored_count,
+            },
+            "error": None,
+        }
 
         print(
             f"[SYNC] Concluído | novos: {downloaded_count}, "
@@ -68,6 +117,19 @@ def run_sync():
         )
 
     except Exception as e:
+        SYNC_STATUS = {
+            "status": "error",
+            "message": "Erro na sincronização.",
+            "started_at": SYNC_STATUS.get("started_at"),
+            "finished_at": datetime.utcnow().isoformat(),
+            "result": {
+                "downloaded": 0,
+                "skipped": 0,
+                "ignored": 0,
+            },
+            "error": str(e),
+        }
+
         print(f"[SYNC ERROR] {e}")
 
 
@@ -78,12 +140,7 @@ def bootstrap():
     ensure_dir(METADATA_DIR)
     ensure_json_file(GAMES_JSON, [])
     ensure_json_file(CLIPS_JSON, [])
-
-
-def save_clip_metadata(clip: dict):
-    clips = read_json(CLIPS_JSON, [])
-    clips.append(clip)
-    write_json(CLIPS_JSON, clips)
+    ensure_json_file(JOBS_JSON, [])
 
 
 bootstrap()
@@ -92,18 +149,33 @@ sync_games_from_videos()
 
 @app.route("/")
 def index():
-    sync_games_from_videos()
     games = list_games()
     return render_template("index.html", games=games)
 
 
 @app.route("/sync-drive", methods=["POST"])
 def sync_drive():
-    thread = threading.Thread(target=run_sync)
+    if SYNC_STATUS["status"] == "processing":
+        return jsonify({
+            "ok": False,
+            "message": "Já existe uma sincronização em andamento."
+        }), 409
+
+    thread = threading.Thread(target=run_sync, daemon=True)
     thread.start()
 
-    return jsonify({"status": "processing"})
+    return jsonify({
+        "ok": True,
+        "status": "processing",
+        "message": "Sincronização iniciada."
+    }), 202
 
+@app.route("/sync-status")
+def sync_status():
+    return jsonify({
+        "ok": True,
+        "sync": SYNC_STATUS
+    })
 
 @app.route("/video/<game_id>")
 def video_page(game_id):
@@ -112,10 +184,7 @@ def video_page(game_id):
         abort(404)
 
     master_video_path = Path(game["file_path"]).resolve()
-    preview_path = get_preview_path(master_video_path)
-
-    if not preview_path.exists():
-        create_preview(master_video_path)
+    preview_ready = preview_exists(master_video_path)
 
     latest_clip = None
     clips = read_json(CLIPS_JSON, [])
@@ -126,7 +195,8 @@ def video_page(game_id):
     return render_template(
         "video.html",
         game=game,
-        preview_url=url_for("serve_preview", game_id=game_id),
+        preview_ready=preview_ready,
+        preview_url=url_for("serve_preview", game_id=game_id) if preview_ready else None,
         latest_clip=latest_clip,
         preset_before=PRESET_BEFORE,
         preset_after=PRESET_AFTER,
@@ -139,10 +209,12 @@ def generate_clip(game_id):
     if not game:
         abort(404)
 
-    current_seconds = int(float(request.form.get("current_seconds", 0) or 0))
+    data = request.get_json(silent=True) or request.form
 
-    raw_start = request.form.get("start_seconds")
-    raw_end = request.form.get("end_seconds")
+    current_seconds = int(float(data.get("current_seconds", 0) or 0))
+
+    raw_start = data.get("start_seconds")
+    raw_end = data.get("end_seconds")
 
     start_seconds = None
     end_seconds = None
@@ -161,19 +233,59 @@ def generate_clip(game_id):
     else:
         preset_name = "trecho manual"
 
-    clip = create_clip(
-        game_id=game["id"],
-        game_name=game["name"],
-        source_file=game["file_path"],
-        event_seconds=current_seconds,
+    job = create_clip_job(
+        game=game,
+        current_seconds=current_seconds,
         start_seconds=start_seconds,
         end_seconds=end_seconds,
         preset_name=preset_name,
     )
-    save_clip_metadata(clip)
 
-    return redirect(url_for("video_page", game_id=game_id, clip_id=clip["id"]))
+    return jsonify(
+        {
+            "ok": True,
+            "job_id": job["id"],
+            "status": job["status"],
+            "message": "Geração de clipe iniciada.",
+        }
+    ), 202
 
+@app.route("/clip-status/<job_id>")
+def clip_status(job_id):
+    job = get_job(job_id)
+    if not job:
+        return jsonify({"ok": False, "message": "Job não encontrado."}), 404
+
+    return jsonify(
+        {
+            "ok": True,
+            "job_id": job["id"],
+            "status": job["status"],
+            "error_message": job.get("error_message"),
+            "clip_id": job.get("clip_id"),
+            "clip_file": job.get("clip_file"),
+        }
+    )
+
+@app.route("/latest_clip/<game_id>")
+def latest_clip(game_id):
+    clips = read_json(CLIPS_JSON, [])
+    matching = [c for c in clips if c["game_id"] == game_id]
+
+    if not matching:
+        return jsonify({"ok": False, "message": "Nenhum clipe encontrado."}), 404
+
+    clip = matching[-1]
+
+    return jsonify(
+        {
+            "ok": True,
+            "clip": {
+                "id": clip["id"],
+                "download_url": url_for("download_clip", clip_id=clip["id"]),
+            }
+        }
+    )
 
 @app.route("/media/preview/<game_id>")
 def serve_preview(game_id):
@@ -183,10 +295,62 @@ def serve_preview(game_id):
 
     preview_path = get_preview_path(Path(game["file_path"]).resolve())
     if not preview_path.exists():
-        create_preview(Path(game["file_path"]).resolve())
+        abort(404)
 
     return send_file(preview_path, mimetype="video/mp4", conditional=True)
 
+@app.route("/generate_preview/<game_id>", methods=["POST"])
+def generate_preview(game_id):
+    game = get_game_by_id(game_id)
+    if not game:
+        return jsonify({"ok": False, "message": "Jogo não encontrado."}), 404
+
+    source_file = Path(game["file_path"]).resolve()
+    if preview_exists(source_file):
+        return jsonify(
+            {
+                "ok": True,
+                "already_ready": True,
+                "preview_url": url_for("serve_preview", game_id=game_id),
+            }
+        )
+
+    job = create_preview_job(game)
+
+    return jsonify(
+        {
+            "ok": True,
+            "already_ready": False,
+            "job_id": job["id"],
+            "status": job["status"],
+            "message": "Geração de preview iniciada.",
+        }
+    ), 202
+
+@app.route("/preview-status/<job_id>")
+def preview_status(job_id):
+    job = get_job(job_id)
+    if not job or job.get("type") != "preview":
+        return jsonify({"ok": False, "message": "Job de preview não encontrado."}), 404
+
+    if job["status"] == "done":
+        return jsonify(
+            {
+                "ok": True,
+                "job_id": job["id"],
+                "status": job["status"],
+                "preview_url": url_for("serve_preview", game_id=job["game_id"]),
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "job_id": job["id"],
+            "status": job["status"],
+            "error_message": job.get("error_message"),
+        }
+    )
 
 @app.route("/download_clip/<clip_id>")
 def download_clip(clip_id):

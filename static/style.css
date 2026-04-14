@@ -831,3 +831,65 @@ p {
 .sync-fab:active {
   transform: scale(0.95);
 }
+
+.job-status {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  background: #1f1f1f;
+  color: #fff;
+}
+
+.job-status[data-type="success"] {
+  background: #16351f;
+}
+
+.job-status[data-type="error"] {
+  background: #4a1f1f;
+}
+
+.job-status[data-type="info"] {
+  background: #1f2a3d;
+}
+
+.sync-status-card {
+  margin-bottom: 20px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #161616;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sync-status-header {
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.sync-status-meta,
+.sync-status-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.sync-status-card[data-status="processing"] {
+  border-color: rgba(255, 196, 0, 0.35);
+}
+
+.sync-status-card[data-status="done"] {
+  border-color: rgba(0, 200, 120, 0.35);
+}
+
+.sync-status-card[data-status="error"] {
+  border-color: rgba(255, 80, 80, 0.35);
+}
+
+#syncStatusError {
+  margin-top: 10px;
+  color: #ff7b7b;
+}

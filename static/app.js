@@ -21,11 +21,146 @@ function parseValue(value) {
   return Math.max(0, Math.floor(n));
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const player = document.getElementById("videoPlayer");
-  const form = document.getElementById("clipForm");
+function formatDateTime(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("pt-BR");
+}
 
-  if (!player || !form) return;
+let syncPollingInterval = null;
+
+function renderSyncStatus(sync) {
+  const card = document.getElementById("syncStatusCard");
+  const message = document.getElementById("syncStatusMessage");
+  const started = document.getElementById("syncStatusStarted");
+  const finished = document.getElementById("syncStatusFinished");
+  const downloaded = document.getElementById("syncDownloaded");
+  const skipped = document.getElementById("syncSkipped");
+  const ignored = document.getElementById("syncIgnored");
+  const error = document.getElementById("syncStatusError");
+
+  if (!card) return;
+
+  card.hidden = false;
+  card.dataset.status = sync.status;
+
+  if (message) message.textContent = sync.message || "";
+  if (started) started.textContent = sync.started_at ? `Início: ${formatDateTime(sync.started_at)}` : "";
+  if (finished) finished.textContent = sync.finished_at ? `Fim: ${formatDateTime(sync.finished_at)}` : "";
+  if (downloaded) downloaded.textContent = `Novos: ${sync.result?.downloaded ?? 0}`;
+  if (skipped) skipped.textContent = `Existentes: ${sync.result?.skipped ?? 0}`;
+  if (ignored) ignored.textContent = `Ignorados: ${sync.result?.ignored ?? 0}`;
+  if (error) error.textContent = sync.error ? `Erro: ${sync.error}` : "";
+
+  if (sync.status === "done" || sync.status === "error") {
+    setTimeout(() => {
+      const card = document.getElementById("syncStatusCard");
+      if (card) {
+        card.hidden = true;
+      }
+    }, 10000); // 10 segundos
+  }
+}
+
+async function fetchSyncStatus() {
+  const response = await fetch("/sync-status");
+  const data = await response.json();
+
+  if (!response.ok || !data.ok) {
+    throw new Error("Não foi possível consultar o status da sincronização.");
+  }
+
+  renderSyncStatus(data.sync);
+
+  if (data.sync.status === "processing") {
+    startSyncPolling();
+  } else {
+    stopSyncPolling();
+  }
+}
+
+function startSyncPolling() {
+  if (syncPollingInterval) return;
+
+  syncPollingInterval = setInterval(() => {
+    fetchSyncStatus().catch(() => {
+      stopSyncPolling();
+    });
+  }, 2000);
+}
+
+function stopSyncPolling() {
+  if (syncPollingInterval) {
+    clearInterval(syncPollingInterval);
+    syncPollingInterval = null;
+  }
+}
+
+function syncWithAdminKey() {
+  const key = prompt("Digite o código:");
+
+  if (key !== "lucas123") {
+    alert("Acesso negado");
+    return;
+  }
+
+    const card = document.getElementById("syncStatusCard");
+  if (card) {
+    card.hidden = false;
+  }
+  const btn = document.getElementById("syncBtn");
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `
+      <i class="fa-solid fa-spinner fa-spin"></i>
+    `;
+  }
+
+fetch("/sync-drive", {
+  method: "POST"
+})
+  .then(async (response) => {
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.includes("application/json")) {
+      const rawText = await response.text();
+      console.error("Resposta inesperada do /sync-drive:", rawText);
+      throw new Error("O servidor não retornou JSON no /sync-drive.");
+    }
+
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data.message || "Erro ao iniciar sincronização.");
+    }
+
+    startSyncPolling();
+    return fetchSyncStatus();
+  })
+    .catch((error) => {
+      alert(error.message || "Erro ao iniciar");
+    })
+    .finally(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <i class="fa-solid fa-arrows-rotate"></i>
+        `;
+      }
+    });
+}
+
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  let player = document.getElementById("videoPlayer");
+  const form = document.getElementById("clipForm");
+  const playerCard = document.getElementById("playerCard");
+
+  if (!form || !playerCard) return;
+
+  const gameId = form.dataset.gameId;
+  const previewReady = playerCard.dataset.previewReady === "true";
 
   const currentSecondsInput = document.getElementById("current_seconds");
   const startSecondsInput = document.getElementById("start_seconds");
@@ -43,9 +178,25 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleLatestClipBtn = document.getElementById("toggleLatestClipBtn");
   const closeLatestClipBtn = document.getElementById("closeLatestClipBtn");
 
+  const jobStatus = document.getElementById("jobStatus");
+  const dynamicResultSection = document.getElementById("dynamicResultSection");
+
   let isSubmitting = false;
+  let currentJobId = null;
+  let pollingInterval = null;
+
+  let currentPreviewJobId = null;
+  let previewPollingInterval = null;
+
+  function setEditorEnabled(enabled) {
+    [markStartBtn, markEndBtn, clearSelectionBtn, generateClipBtn].forEach((btn) => {
+      if (!btn) return;
+      btn.disabled = !enabled;
+    });
+  }
 
   function getCurrent() {
+    if (!player) return 0;
     return Math.max(0, Math.floor(player.currentTime || 0));
   }
 
@@ -83,18 +234,35 @@ document.addEventListener("DOMContentLoaded", () => {
     button.setAttribute("aria-pressed", isActive ? "true" : "false");
   }
 
+  function setStatus(message, type = "info") {
+    if (!jobStatus) return;
+
+    jobStatus.hidden = false;
+    jobStatus.textContent = message;
+    jobStatus.dataset.type = type;
+  }
+
+  function clearStatus() {
+    if (!jobStatus) return;
+
+    jobStatus.hidden = true;
+    jobStatus.textContent = "";
+    delete jobStatus.dataset.type;
+  }
+
   function updateGenerateButton() {
     if (!generateClipBtn) return;
 
     const valid = hasValidRange();
+    const disabled = !valid || isSubmitting || !player;
 
-    generateClipBtn.disabled = !valid || isSubmitting;
-    generateClipBtn.classList.toggle("is-disabled", !valid || isSubmitting);
+    generateClipBtn.disabled = disabled;
+    generateClipBtn.classList.toggle("is-disabled", disabled);
 
     if (isSubmitting) {
       generateClipBtn.innerHTML = `
         <i class="fa-solid fa-spinner fa-spin"></i>
-        <span>Gerando...</span>
+        <span>Processando...</span>
       `;
       return;
     }
@@ -127,6 +295,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function markStart() {
+    if (!player) return;
+
     const current = getCurrent();
     startSecondsInput.value = current;
     syncCurrentTime();
@@ -134,6 +304,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function markEnd() {
+    if (!player) return;
+
     const current = getCurrent();
     endSecondsInput.value = current;
     syncCurrentTime();
@@ -160,12 +332,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function pauseBeforeMark() {
-    if (!player.paused) {
+    if (player && !player.paused) {
       player.pause();
     }
   }
 
   function validateBeforeSubmit(showAlert = true) {
+    if (!player) {
+      if (showAlert) {
+        alert("O vídeo ainda está sendo preparado.");
+      }
+      return false;
+    }
+
     const start = getStart();
     const end = getEnd();
 
@@ -214,6 +393,241 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
   }
 
+  function renderLatestClip(downloadUrl) {
+    if (!dynamicResultSection) return;
+
+    dynamicResultSection.innerHTML = `
+      <div class="clip-card">
+        <div class="clip-card-header">
+          <div>
+            <h2>Clipe gerado com sucesso</h2>
+            <p class="section-subtitle">Visualize ou baixe o arquivo.</p>
+          </div>
+        </div>
+
+        <video class="video-player" controls preload="metadata" playsinline webkit-playsinline>
+          <source src="${downloadUrl}" type="video/mp4">
+          Seu navegador não suporta vídeo.
+        </video>
+
+        <a class="button full" href="${downloadUrl}">
+          Baixar clipe
+        </a>
+      </div>
+    `;
+  }
+
+  async function fetchLatestClip() {
+    const response = await fetch(`/latest_clip/${gameId}`);
+    if (!response.ok) {
+      throw new Error("Não foi possível carregar o clipe gerado.");
+    }
+
+    const data = await response.json();
+    return data.clip;
+  }
+
+  async function checkJobStatus() {
+    if (!currentJobId) return;
+
+    const response = await fetch(`/clip-status/${currentJobId}`);
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data.message || "Erro ao consultar status do job.");
+    }
+
+    if (data.status === "pending") {
+      setStatus("Seu clipe entrou na fila. Aguarde...", "info");
+      return;
+    }
+
+    if (data.status === "processing") {
+      setStatus("Gerando clipe em segundo plano...", "info");
+      return;
+    }
+
+    if (data.status === "error") {
+      stopPolling();
+      isSubmitting = false;
+      updateGenerateButton();
+      setStatus(data.error_message || "Erro ao gerar clipe.", "error");
+      return;
+    }
+
+    if (data.status === "done") {
+      stopPolling();
+      isSubmitting = false;
+      updateGenerateButton();
+      setStatus("Clipe gerado com sucesso.", "success");
+
+      const clip = await fetchLatestClip();
+      renderLatestClip(clip.download_url);
+    }
+  }
+
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+
+  function startPolling(jobId) {
+    currentJobId = jobId;
+    stopPolling();
+
+    pollingInterval = setInterval(() => {
+      checkJobStatus().catch((error) => {
+        stopPolling();
+        isSubmitting = false;
+        updateGenerateButton();
+        setStatus(error.message || "Erro ao acompanhar processamento.", "error");
+      });
+    }, 2000);
+
+    checkJobStatus().catch((error) => {
+      stopPolling();
+      isSubmitting = false;
+      updateGenerateButton();
+      setStatus(error.message || "Erro ao acompanhar processamento.", "error");
+    });
+  }
+
+  function bindPlayerEvents() {
+    if (!player) return;
+
+    player.addEventListener("loadedmetadata", () => {
+      syncCurrentTime();
+      updateLabels();
+    });
+
+    player.addEventListener("timeupdate", syncCurrentTime);
+
+    player.addEventListener("play", () => {
+      syncCurrentTime();
+    });
+
+    player.addEventListener("pause", () => {
+      syncCurrentTime();
+    });
+  }
+
+  function renderPreviewPlayer(previewUrl) {
+    playerCard.innerHTML = `
+      <video
+        id="videoPlayer"
+        class="video-player"
+        controls
+        preload="metadata"
+        playsinline
+        webkit-playsinline
+      >
+        <source src="${previewUrl}" type="video/mp4">
+        Seu navegador não suporta vídeo.
+      </video>
+    `;
+
+    player = document.getElementById("videoPlayer");
+    bindPlayerEvents();
+    setEditorEnabled(true);
+    syncCurrentTime();
+    updateLabels();
+    setStatus("Vídeo pronto para edição.", "success");
+  }
+
+  function stopPreviewPolling() {
+    if (previewPollingInterval) {
+      clearInterval(previewPollingInterval);
+      previewPollingInterval = null;
+    }
+  }
+
+  async function checkPreviewStatus() {
+    if (!currentPreviewJobId) return;
+
+    const response = await fetch(`/preview-status/${currentPreviewJobId}`);
+    const data = await response.json();
+
+    if (!response.ok || !data.ok) {
+      throw new Error(data.message || "Erro ao consultar status do preview.");
+    }
+
+    if (data.status === "pending") {
+      setStatus("Seu vídeo entrou na fila de preparação...", "info");
+      return;
+    }
+
+    if (data.status === "processing") {
+      setStatus("Preparando vídeo para edição...", "info");
+      return;
+    }
+
+    if (data.status === "error") {
+      stopPreviewPolling();
+      setStatus(data.error_message || "Erro ao gerar preview.", "error");
+      return;
+    }
+
+    if (data.status === "done") {
+      stopPreviewPolling();
+      renderPreviewPlayer(data.preview_url);
+    }
+  }
+
+  function startPreviewPolling(jobId) {
+    currentPreviewJobId = jobId;
+    stopPreviewPolling();
+
+    previewPollingInterval = setInterval(() => {
+      checkPreviewStatus().catch((error) => {
+        stopPreviewPolling();
+        setStatus(error.message || "Erro ao acompanhar preview.", "error");
+      });
+    }, 2000);
+
+    checkPreviewStatus().catch((error) => {
+      stopPreviewPolling();
+      setStatus(error.message || "Erro ao acompanhar preview.", "error");
+    });
+  }
+
+  async function ensurePreviewReady() {
+    setEditorEnabled(false);
+
+    if (previewReady) {
+      bindPlayerEvents();
+      setEditorEnabled(true);
+      syncCurrentTime();
+      updateLabels();
+      clearStatus();
+      return;
+    }
+
+    setStatus("Solicitando preparação do vídeo...", "info");
+
+    try {
+      const response = await fetch(`/generate_preview/${playerCard.dataset.gameId}`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || "Erro ao iniciar geração do preview.");
+      }
+
+      if (data.already_ready) {
+        renderPreviewPlayer(data.preview_url);
+        return;
+      }
+
+      startPreviewPolling(data.job_id);
+    } catch (error) {
+      setStatus(error.message || "Erro ao preparar vídeo.", "error");
+    }
+  }
+
   if (toggleLatestClipBtn && latestClipCard) {
     toggleLatestClipBtn.addEventListener("click", () => {
       toggleLatestClip();
@@ -237,21 +651,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   clearSelectionBtn?.addEventListener("click", clearSelection);
-
-  player.addEventListener("loadedmetadata", () => {
-    syncCurrentTime();
-    updateLabels();
-  });
-
-  player.addEventListener("timeupdate", syncCurrentTime);
-
-  player.addEventListener("play", () => {
-    syncCurrentTime();
-  });
-
-  player.addEventListener("pause", () => {
-    syncCurrentTime();
-  });
 
   document.addEventListener("keydown", (event) => {
     const tag = document.activeElement?.tagName?.toLowerCase();
@@ -300,6 +699,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (key === " ") {
       event.preventDefault();
 
+      if (!player) return;
+
       if (player.paused) {
         player.play().catch(() => {});
       } else {
@@ -310,67 +711,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (key === "g") {
       event.preventDefault();
-
-      if (!validateBeforeSubmit(true)) return;
-
-      normalizeRangeBeforeSubmit();
       form.requestSubmit();
     }
   });
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
     syncCurrentTime();
 
     if (!validateBeforeSubmit(true)) {
-      event.preventDefault();
       return;
     }
 
     normalizeRangeBeforeSubmit();
+
+    const payload = {
+      current_seconds: currentSecondsInput.value,
+      start_seconds: startSecondsInput.value,
+      end_seconds: endSecondsInput.value,
+    };
+
     isSubmitting = true;
     updateGenerateButton();
+    setStatus("Enviando solicitação de geração...", "info");
+
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || "Erro ao iniciar geração do clipe.");
+      }
+
+      startPolling(data.job_id);
+    } catch (error) {
+      isSubmitting = false;
+      updateGenerateButton();
+      setStatus(error.message || "Erro ao iniciar geração do clipe.", "error");
+    }
   });
 
   updateLabels();
   syncCurrentTime();
+  ensurePreviewReady();
 });
-
-
-function syncWithAdminKey() {
-  const key = prompt("Digite o código:");
-
-  if (key !== "lucas123") {
-    alert("Acesso negado");
-    return;
-  }
-
-  const btn = document.getElementById("syncBtn");
-
-  // muda estado do botão
-  btn.disabled = true;
-  btn.innerHTML = `
-    <i class="fa-solid fa-spinner fa-spin"></i>
-    <span>Sincronizando...</span>
-  `;
-
-  fetch("/sync-drive", {
-    method: "POST"
-  })
-  .then(() => {
-    alert("Sincronização iniciada 🚀");
-
-    // opcional: volta botão ao normal depois de X segundos
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.innerHTML = `
-        <i class="fa-solid fa-arrows-rotate"></i>
-        <span>Sincronizar vídeos do Drive</span>
-      `;
-    }, 5000);
-  })
-  .catch(() => {
-    alert("Erro ao iniciar");
-
-    btn.disabled = false;
-  });
-}

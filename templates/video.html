@@ -23,39 +23,39 @@
         </div>
       </header>
 
-      <section
-        class="player-card"
-        id="playerCard"
-        data-game-id="{{ game.id }}"
-        data-preview-ready="{{ 'true' if preview_ready else 'false' }}"
+        <section
+    class="player-card"
+    id="playerCard"
+    data-game-id="{{ game.id }}"
+    data-preview-ready="{{ 'true' if preview_ready else 'false' }}"
+  >
+    {% if preview_ready %}
+      <video
+        id="videoPlayer"
+        class="video-player"
+        controls
+        preload="metadata"
+        playsinline
+        webkit-playsinline
       >
-        {% if preview_ready %}
-          <video
-            id="videoPlayer"
-            class="video-player"
-            controls
-            preload="metadata"
-            playsinline
-            webkit-playsinline
-          >
-            <source src="{{ preview_url }}" type="video/mp4">
-            Seu navegador não suporta vídeo.
-          </video>
-        {% else %}
-          <div class="preview-loading" id="previewLoading">
-            <p>Estamos preparando o vídeo para edição.</p>
-            <p>Isso pode levar alguns instantes.</p>
-          </div>
-        {% endif %}
-      </section>
+        <source src="{{ preview_url }}?v={{ preview_version }}" type="video/mp4">
+        Seu navegador não suporta vídeo.
+      </video>
+    {% else %}
+      <div class="preview-loading" id="previewLoading">
+        <p>Estamos preparando o vídeo para edição.</p>
+        <p>Isso pode levar alguns instantes.</p>
+      </div>
+    {% endif %}
+  </section>
 
       <section class="editor-card">
         <form
-          id="clipForm"
-          method="post"
-          action="{{ url_for('generate_clip', game_id=game.id) }}"
-          data-game-id="{{ game.id }}"
-        >
+        id="clipForm"
+        method="post"
+        action="{{ url_for('generate_clip', game_id=game.id) }}"
+        data-game-id="{{ game.id }}"
+      >
           <input type="hidden" name="current_seconds" id="current_seconds" value="0">
           <input type="hidden" name="start_seconds" id="start_seconds" value="">
           <input type="hidden" name="end_seconds" id="end_seconds" value="">

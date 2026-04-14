@@ -190,11 +190,20 @@ def video_page(game_id):
     if matching:
         latest_clip = matching[-1]
 
+    preview_url = None
+    preview_version = None
+
+    if preview_ready:
+        preview_path = get_preview_path(master_video_path)
+        preview_url = url_for("serve_preview", game_id=game_id)
+        preview_version = int(preview_path.stat().st_mtime)
+
     return render_template(
         "video.html",
         game=game,
         preview_ready=preview_ready,
-        preview_url=url_for("serve_preview", game_id=game_id) if preview_ready else None,
+        preview_url=preview_url,
+        preview_version=preview_version,
         latest_clip=latest_clip,
         preset_before=PRESET_BEFORE,
         preset_after=PRESET_AFTER,
@@ -448,12 +457,16 @@ def preview_status(job_id):
         return jsonify({"ok": False, "message": "Job de preview não encontrado."}), 404
 
     if job["status"] == "done":
+        preview_path = get_preview_path(Path(job["source_file"]).resolve())
+        preview_version = int(preview_path.stat().st_mtime) if preview_path.exists() else int(datetime.utcnow().timestamp())
+
         return jsonify(
             {
                 "ok": True,
                 "job_id": job["id"],
                 "status": job["status"],
                 "preview_url": url_for("serve_preview", game_id=job["game_id"]),
+                "preview_version": preview_version,
             }
         )
 

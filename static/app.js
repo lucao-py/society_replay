@@ -605,7 +605,7 @@ document.addEventListener("DOMContentLoaded", () => {
         playsinline
         webkit-playsinline
       >
-        <source src="${previewUrl}" type="video/mp4">
+        <source src="${previewUrl}?v=${Date.now()}" type="video/mp4">
         Seu navegador não suporta vídeo.
       </video>
     `;
@@ -653,7 +653,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (data.status === "done") {
       stopPreviewPolling();
-      renderPreviewPlayer(data.preview_url);
+      const previewUrl = data.preview_version
+      ? `${data.preview_url}?v=${data.preview_version}`
+      : `${data.preview_url}?v=${Date.now()}`;
+
+    renderPreviewPlayer(previewUrl);
     }
   }
 

@@ -971,3 +971,28 @@ p {
 .admin-video-delete-btn:hover {
   background: #2a2a2a;
 }
+
+.admin-status-card {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #1b1b1b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-status-header {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.admin-status-card[data-type="info"] {
+  border-color: rgba(80, 150, 255, 0.35);
+}
+
+.admin-status-card[data-type="success"] {
+  border-color: rgba(0, 200, 120, 0.35);
+}
+
+.admin-status-card[data-type="error"] {
+  border-color: rgba(255, 80, 80, 0.35);
+}

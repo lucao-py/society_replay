@@ -27,6 +27,7 @@ function formatDateTime(value) {
 }
 
 let syncPollingInterval = null;
+let adminUnlocked = false;
 
 function renderSyncStatus(sync) {
   const card = document.getElementById("syncStatusCard");
@@ -53,11 +54,8 @@ function renderSyncStatus(sync) {
 
   if (sync.status === "done" || sync.status === "error") {
     setTimeout(() => {
-      const card = document.getElementById("syncStatusCard");
-      if (card) {
-        card.hidden = true;
-      }
-    }, 10000); // 10 segundos
+      card.hidden = true;
+    }, 10000);
   }
 }
 
@@ -95,13 +93,35 @@ function stopSyncPolling() {
   }
 }
 
-let adminUnlocked = false;
+function setAdminStatus(message, type = "info") {
+  const card = document.getElementById("adminStatusCard");
+  const messageEl = document.getElementById("adminStatusMessage");
+
+  if (!card || !messageEl) return;
+
+  card.hidden = false;
+  card.dataset.type = type;
+  messageEl.textContent = message;
+}
+
+function clearAdminStatus() {
+  const card = document.getElementById("adminStatusCard");
+  const messageEl = document.getElementById("adminStatusMessage");
+
+  if (!card || !messageEl) return;
+
+  card.hidden = true;
+  messageEl.textContent = "";
+  delete card.dataset.type;
+}
 
 function openAdminPanel() {
   const panel = document.getElementById("adminPanel");
   if (panel) {
     panel.hidden = false;
   }
+
+  clearAdminStatus();
 }
 
 function closeAdminPanel() {
@@ -112,21 +132,26 @@ function closeAdminPanel() {
 }
 
 async function postAdminAction(url, successMessage = "Ação executada com sucesso.") {
+  setAdminStatus("Processando ação...", "info");
+
   const response = await fetch(url, { method: "POST" });
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
     const rawText = await response.text();
     console.error("Resposta inesperada:", rawText);
+    setAdminStatus("O servidor não retornou JSON.", "error");
     throw new Error("O servidor não retornou JSON.");
   }
 
   const data = await response.json();
 
   if (!response.ok || !data.ok) {
+    setAdminStatus(data.message || "Erro ao executar ação.", "error");
     throw new Error(data.message || "Erro ao executar ação.");
   }
 
+  setAdminStatus(data.message || successMessage, "success");
   return data.message || successMessage;
 }
 
@@ -146,20 +171,19 @@ function syncWithAdminKey() {
   adminUnlocked = true;
   openAdminPanel();
 }
-
 async function adminSync() {
   try {
-    const message = await postAdminAction("/sync-drive", "Sincronização iniciada.");
     const card = document.getElementById("syncStatusCard");
     if (card) {
       card.hidden = false;
     }
 
+    await postAdminAction("/sync-drive", "Sincronização iniciada.");
+
     startSyncPolling();
     fetchSyncStatus().catch(() => {});
-    alert(message);
   } catch (error) {
-    alert(error.message || "Erro ao iniciar sincronização.");
+    console.error(error);
   }
 }
 
@@ -168,10 +192,9 @@ async function adminClearPreviews() {
   if (!confirmed) return;
 
   try {
-    const message = await postAdminAction("/admin/clear-previews");
-    alert(message);
+    await postAdminAction("/admin/clear-previews");
   } catch (error) {
-    alert(error.message || "Erro ao apagar previews.");
+    console.error(error);
   }
 }
 
@@ -180,10 +203,9 @@ async function adminRegeneratePreviews() {
   if (!confirmed) return;
 
   try {
-    const message = await postAdminAction("/admin/regenerate-previews");
-    alert(message);
+    await postAdminAction("/admin/regenerate-previews");
   } catch (error) {
-    alert(error.message || "Erro ao regenerar previews.");
+    console.error(error);
   }
 }
 
@@ -192,10 +214,9 @@ async function adminClearClips() {
   if (!confirmed) return;
 
   try {
-    const message = await postAdminAction("/admin/clear-clips");
-    alert(message);
+    await postAdminAction("/admin/clear-clips");
   } catch (error) {
-    alert(error.message || "Erro ao apagar clipes.");
+    console.error(error);
   }
 }
 
@@ -204,17 +225,16 @@ async function adminDeleteVideo(gameId, fileName) {
   if (!confirmed) return;
 
   try {
-    const message = await postAdminAction(`/admin/delete-video/${gameId}`);
-    alert(message);
+    await postAdminAction(`/admin/delete-video/${gameId}`);
     window.location.reload();
   } catch (error) {
-    alert(error.message || "Erro ao deletar vídeo.");
+    console.error(error);
   }
 }
 
 
-
 document.addEventListener("DOMContentLoaded", () => {
+  // Página de vídeo
   let player = document.getElementById("videoPlayer");
   const form = document.getElementById("clipForm");
   const playerCard = document.getElementById("playerCard");
@@ -332,7 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
     generateClipBtn.innerHTML = `
       <i class="fa-solid fa-scissors"></i>
       <span>Gerar clipe</span>
-    `;
+      `;
   }
 
   function updateLabels() {
@@ -825,21 +845,21 @@ document.addEventListener("DOMContentLoaded", () => {
   ensurePreviewReady();
 
   document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        stopPolling();
-        stopPreviewPolling();
-        stopSyncPolling();
-        return;
-      }
+    if (document.hidden) {
+      stopPolling();
+      stopPreviewPolling();
+      stopSyncPolling();
+      return;
+    }
 
-      if (currentJobId) {
-        startPolling(currentJobId);
-      }
+    if (currentJobId) {
+      startPolling(currentJobId);
+    }
 
-      if (currentPreviewJobId) {
-        startPreviewPolling(currentPreviewJobId);
-      }
+    if (currentPreviewJobId) {
+      startPreviewPolling(currentPreviewJobId);
+    }
 
-      fetchSyncStatus().catch(() => {});
-    });
+    fetchSyncStatus().catch(() => {});
+  });
 });
